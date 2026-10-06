@@ -1,13 +1,8 @@
 -- ============================================================
--- Sakura.vs / Supreme.vs — Anti Bat (tam kod)
--- Kaynak: Sakura_vs_PingFixed.lua
+-- Sakura.vs Anti Bat — STANDALONE (execute = panel açılır)
 -- ============================================================
--- Bağımlılıklar (ana scriptten gelmeli):
---   LP, Players, RunService, UIS, TS (TweenService)
---   BACKGROUND_ASSET_ID, saveAllSettings, InfiniteJump (opsiyonel)
---   setAntiBatVisual, mobSetAntiBat, setJumpVisual (opsiyonel UI)
---   _isResetting, _V3new (veya Vector3.new)
--- ============================================================
+
+repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -17,37 +12,35 @@ local LP = Players.LocalPlayer
 
 local _V3new = Vector3.new
 
--- State
-antiBatEnabled = false
-antiBatConn = nil
-antiBatPanelVisible = false
-antiBatPanelGui = nil
-antiBatPanelPos = antiBatPanelPos or nil
-antiBatPanelCollapsed = antiBatPanelCollapsed or false
-
--- Opsiyonel UI hook'ları (ana GUI bağlarsa)
-setAntiBatVisual = setAntiBatVisual or nil
-mobSetAntiBat = mobSetAntiBat or nil
-setJumpVisual = setJumpVisual or nil
-_isResetting = _isResetting or false
-BACKGROUND_ASSET_ID = BACKGROUND_ASSET_ID or "126567400601699"
-
-local function saveAllSettings()
-    if type(_G.saveAllSettings) == "function" then
-        pcall(_G.saveAllSettings)
-    elseif type(saveAllSettings) == "function" then
-        -- zaten global olabilir
+-- Eski paneli temizle
+pcall(function()
+    local pg = LP:FindFirstChild("PlayerGui")
+    if pg then
+        local g = pg:FindFirstChild("SupremeAntiBat")
+        if g then g:Destroy() end
     end
-end
+    local cg = game:GetService("CoreGui")
+    local g2 = cg:FindFirstChild("SupremeAntiBat")
+    if g2 then g2:Destroy() end
+end)
+
+-- State
+local antiBatEnabled = false
+local antiBatConn = nil
+local antiBatPanelGui = nil
+local antiBatPanelVisible = false
+local antiBatPanelPos = nil
+local antiBatPanelCollapsed = false
+local BACKGROUND_ASSET_ID = "126567400601699"
 
 -- ============================================================
--- Aspect-style Anti Bat (spiral velocity)
+-- Anti Bat logic
 -- ============================================================
 local _antiBatSpeed = 10000
 local _antiBatAngle = 0
 local _antiBatDirection = 1
 
-function stopAntiBat()
+local function stopAntiBat()
     antiBatEnabled = false
     if antiBatConn then
         pcall(function() antiBatConn:Disconnect() end)
@@ -56,11 +49,9 @@ function stopAntiBat()
     _antiBatSpeed = 10000
     _antiBatAngle = 0
     _antiBatDirection = 1
-    if setAntiBatVisual then pcall(setAntiBatVisual, false) end
-    if mobSetAntiBat then pcall(mobSetAntiBat, false) end
 end
 
-function startAntiBat()
+local function startAntiBat()
     local char = LP.Character
     if not char then return end
     local root = char:FindFirstChild("HumanoidRootPart")
@@ -74,7 +65,6 @@ function startAntiBat()
 
     antiBatConn = RunService.Heartbeat:Connect(function()
         if not antiBatEnabled then return end
-        if _isResetting then return end
         local c = LP.Character
         if not c then return end
         root = c:FindFirstChild("HumanoidRootPart")
@@ -107,29 +97,47 @@ function startAntiBat()
             root.Velocity = _V3new(origXZ.X, root.Velocity.Y, origXZ.Z)
         end
     end)
-
-    if setAntiBatVisual then pcall(setAntiBatVisual, true) end
-    if mobSetAntiBat then pcall(mobSetAntiBat, true) end
 end
 
-function setAntiBat(on)
+local function setAntiBat(on)
     if on then startAntiBat() else stopAntiBat() end
 end
 
-function toggleAntiBat()
-    if antiBatEnabled then
-        stopAntiBat()
-    else
-        startAntiBat()
+-- ============================================================
+-- Infinite Jump (panel içi)
+-- ============================================================
+local infJumpEnabled = false
+local infJumpConn = nil
+
+local function stopInfJump()
+    infJumpEnabled = false
+    if infJumpConn then
+        pcall(function() infJumpConn:Disconnect() end)
+        infJumpConn = nil
     end
-    pcall(saveAllSettings)
-    return antiBatEnabled
+end
+
+local function startInfJump()
+    infJumpEnabled = true
+    if infJumpConn then
+        pcall(function() infJumpConn:Disconnect() end)
+        infJumpConn = nil
+    end
+    infJumpConn = UIS.JumpRequest:Connect(function()
+        if not infJumpEnabled then return end
+        local char = LP.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hum or not hrp or hum.Health <= 0 then return end
+        local v = hrp.AssemblyLinearVelocity
+        hrp.AssemblyLinearVelocity = _V3new(v.X, 50, v.Z)
+    end)
 end
 
 -- ============================================================
--- SUPREME.VS ANTI BAT PANEL (aç / kapa / küçült)
+-- Panel
 -- ============================================================
-function destroyAntiBatPanel()
+local function destroyAntiBatPanel()
     if antiBatPanelGui then
         pcall(function() antiBatPanelGui:Destroy() end)
         antiBatPanelGui = nil
@@ -147,7 +155,7 @@ function destroyAntiBatPanel()
     antiBatPanelVisible = false
 end
 
-function createAntiBatPanel()
+local function createAntiBatPanel()
     destroyAntiBatPanel()
     local BLUE = Color3.fromRGB(255, 255, 255)
     local WHITE = Color3.fromRGB(255, 255, 255)
@@ -160,12 +168,14 @@ function createAntiBatPanel()
     gui.IgnoreGuiInset = true
     gui.ResetOnSpawn = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.DisplayOrder = 25
+    gui.DisplayOrder = 999
     pcall(function()
         if syn and syn.protect_gui then syn.protect_gui(gui) end
     end)
     local okP = pcall(function() gui.Parent = game:GetService("CoreGui") end)
-    if not okP then gui.Parent = LP:WaitForChild("PlayerGui") end
+    if not okP then
+        gui.Parent = LP:WaitForChild("PlayerGui")
+    end
 
     local Main = Instance.new("Frame")
     Main.Name = "Main"
@@ -178,7 +188,7 @@ function createAntiBatPanel()
             antiBatPanelPos.YOffset or 0
         )
     else
-        Main.Position = UDim2.new(0.5, -130, 0.5, -80)
+        Main.Position = UDim2.new(0.5, -130, 0.5, -106)
     end
     Main.Size = UDim2.new(0, 260, 0, collapsed and MINI_H or FULL_H)
     Main.BackgroundColor3 = Color3.fromRGB(10, 10, 14)
@@ -207,7 +217,6 @@ function createAntiBatPanel()
     dim.ZIndex = 2
     Instance.new("UICorner", dim).CornerRadius = UDim.new(0, 14)
 
-    -- Title bar (sürükleme alanı)
     local titleBar = Instance.new("Frame", Main)
     titleBar.Name = "TitleBar"
     titleBar.ZIndex = 5
@@ -226,18 +235,6 @@ function createAntiBatPanel()
     title.Font = Enum.Font.GothamBlack
     title.TextSize = 14
     title.TextXAlignment = Enum.TextXAlignment.Left
-
-    local sub = Instance.new("TextLabel", titleBar)
-    sub.ZIndex = 5
-    sub.Position = UDim2.new(0, 14, 0, 22)
-    sub.Size = UDim2.new(1, -90, 0, 16)
-    sub.BackgroundTransparency = 1
-    sub.Text = ""
-    sub.Visible = false
-    sub.TextColor3 = WHITE
-    sub.Font = Enum.Font.Gotham
-    sub.TextSize = 11
-    sub.TextXAlignment = Enum.TextXAlignment.Left
 
     local minBtn = Instance.new("TextButton", titleBar)
     minBtn.Name = "Minimize"
@@ -264,7 +261,6 @@ function createAntiBatPanel()
     closeBtn.AutoButtonColor = false
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 6)
 
-    -- Content (küçülünce gizlenir)
     local content = Instance.new("Frame", Main)
     content.Name = "Content"
     content.ZIndex = 5
@@ -281,7 +277,7 @@ function createAntiBatPanel()
     line.BackgroundTransparency = 0.5
     line.BorderSizePixel = 0
 
-    -- Anti Bat toggle row
+    -- Anti Bat row
     local row = Instance.new("Frame", content)
     row.ZIndex = 5
     row.Position = UDim2.new(0, 14, 0, 12)
@@ -329,7 +325,7 @@ function createAntiBatPanel()
     toggleBtn.BackgroundTransparency = 1
     toggleBtn.Text = ""
 
-    -- Infinite Jump toggle row
+    -- Infinite Jump row
     local row2 = Instance.new("Frame", content)
     row2.ZIndex = 5
     row2.Position = UDim2.new(0, 14, 0, 64)
@@ -353,20 +349,19 @@ function createAntiBatPanel()
     lbl2.TextSize = 13
     lbl2.TextXAlignment = Enum.TextXAlignment.Left
 
-    local infOn = (InfiniteJump and InfiniteJump.isRunning and InfiniteJump.isRunning()) == true
     local track2 = Instance.new("Frame", row2)
     track2.Name = "Track"
     track2.ZIndex = 7
     track2.Position = UDim2.new(1, -58, 0.5, -12)
     track2.Size = UDim2.new(0, 46, 0, 24)
-    track2.BackgroundColor3 = infOn and BLUE or Color3.fromRGB(55, 55, 68)
+    track2.BackgroundColor3 = infJumpEnabled and BLUE or Color3.fromRGB(55, 55, 68)
     track2.BorderSizePixel = 0
     Instance.new("UICorner", track2).CornerRadius = UDim.new(1, 0)
 
     local knob2 = Instance.new("Frame", track2)
     knob2.Name = "Knob"
     knob2.ZIndex = 8
-    knob2.Position = infOn and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
+    knob2.Position = infJumpEnabled and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
     knob2.Size = UDim2.new(0, 18, 0, 18)
     knob2.BackgroundColor3 = WHITE
     knob2.BorderSizePixel = 0
@@ -412,26 +407,20 @@ function createAntiBatPanel()
         content.Visible = not collapsed
         Main.Size = UDim2.new(0, 260, 0, collapsed and MINI_H or FULL_H)
         minBtn.Text = collapsed and "□" or "_"
-        pcall(saveAllSettings)
     end
 
     toggleBtn.MouseButton1Click:Connect(function()
         setAntiBat(not antiBatEnabled)
         setToggleVisual(antiBatEnabled)
-        pcall(saveAllSettings)
     end)
 
     toggleBtn2.MouseButton1Click:Connect(function()
-        if not InfiniteJump then return end
-        local nowOn = not InfiniteJump.isRunning()
-        if nowOn then
-            InfiniteJump.start()
+        if infJumpEnabled then
+            stopInfJump()
         else
-            InfiniteJump.stop()
+            startInfJump()
         end
-        setInfJumpVisual(nowOn)
-        if setJumpVisual then pcall(setJumpVisual, nowOn) end
-        pcall(saveAllSettings)
+        setInfJumpVisual(infJumpEnabled)
     end)
 
     minBtn.MouseButton1Click:Connect(function()
@@ -440,20 +429,13 @@ function createAntiBatPanel()
 
     closeBtn.MouseButton1Click:Connect(function()
         destroyAntiBatPanel()
+        stopAntiBat()
+        stopInfJump()
     end)
 
-    -- Sürükle + pozisyon kaydet
+    -- Drag
     do
         local dragging, dragStart, startPos, activeInput = false, nil, nil, nil
-        local function savePos()
-            antiBatPanelPos = {
-                XScale = Main.Position.X.Scale,
-                XOffset = Main.Position.X.Offset,
-                YScale = Main.Position.Y.Scale,
-                YOffset = Main.Position.Y.Offset,
-            }
-            pcall(saveAllSettings)
-        end
         titleBar.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
@@ -465,7 +447,14 @@ function createAntiBatPanel()
         end)
         titleBar.InputEnded:Connect(function(input)
             if input == activeInput or input.UserInputType == Enum.UserInputType.MouseButton1 then
-                if dragging then savePos() end
+                if dragging then
+                    antiBatPanelPos = {
+                        XScale = Main.Position.X.Scale,
+                        XOffset = Main.Position.X.Offset,
+                        YScale = Main.Position.Y.Scale,
+                        YOffset = Main.Position.Y.Offset,
+                    }
+                end
                 dragging = false
                 activeInput = nil
             end
@@ -483,7 +472,12 @@ function createAntiBatPanel()
         end)
         UIS.InputEnded:Connect(function(input)
             if dragging and (input == activeInput or input.UserInputType == Enum.UserInputType.MouseButton1) then
-                savePos()
+                antiBatPanelPos = {
+                    XScale = Main.Position.X.Scale,
+                    XOffset = Main.Position.X.Offset,
+                    YScale = Main.Position.Y.Scale,
+                    YOffset = Main.Position.Y.Offset,
+                }
                 dragging = false
                 activeInput = nil
             end
@@ -493,37 +487,32 @@ function createAntiBatPanel()
     antiBatPanelGui = gui
     antiBatPanelVisible = true
     setToggleVisual(antiBatEnabled)
-    setInfJumpVisual((InfiniteJump and InfiniteJump.isRunning and InfiniteJump.isRunning()) == true)
+    setInfJumpVisual(infJumpEnabled)
 end
 
--- ============================================================
--- Ana GUI entegrasyonu (örnek kullanım)
--- ============================================================
---[[
--- Speed sayfasında panel aç/kapa:
-mkSect(speedPage, "Sakura.vs Anti Bat")
-setAntiBatPanelVisual = mkToggle(speedPage, "Anti Bat Panel", function(on)
-    if on then
-        if not antiBatPanelVisible then createAntiBatPanel() end
-    else
-        if antiBatPanelVisible then destroyAntiBatPanel() end
+-- Keybind: B = Anti Bat toggle
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe or UIS:GetFocusedTextBox() then return end
+    if input.KeyCode == Enum.KeyCode.B then
+        setAntiBat(not antiBatEnabled)
+        -- panel açıksa görseli güncellemek için yeniden açmaya gerek yok;
+        -- toggle zaten state'i değiştirir, panel açıksa kullanıcı switch'e basabilir
+        if antiBatPanelVisible and antiBatPanelGui then
+            -- panel zaten var; kullanıcı toggle'a basarak da açabilir
+        end
+        print("[AntiBat]", antiBatEnabled and "ON" or "OFF")
     end
 end)
 
--- Combat sayfasında özellik toggle:
-setAntiBatVisual = mkToggle(combatPage, "Anti Bat", function(on)
-    setAntiBat(on)
-    if mobSetAntiBat then mobSetAntiBat(on) end
-    pcall(saveAllSettings)
+-- Karakter respawn
+LP.CharacterAdded:Connect(function()
+    if antiBatEnabled then
+        task.delay(0.5, function()
+            if antiBatEnabled then startAntiBat() end
+        end)
+    end
 end)
 
--- Keybind (B):
-if kbMatch(KB.AntiBat, kc) then
-    toggleAntiBat()
-    if setAntiBatVisual then setAntiBatVisual(antiBatEnabled) end
-    if mobSetAntiBat then mobSetAntiBat(antiBatEnabled) end
-    return
-end
-]]
-
-print("[Sakura AntiBat] Loaded — startAntiBat / stopAntiBat / createAntiBatPanel / destroyAntiBatPanel")
+-- HEMEN AÇ
+createAntiBatPanel()
+print("[Sakura AntiBat] Panel açıldı — Anti Bat / Infinite Jump toggle'ları aktif | B = Anti Bat")
